@@ -89,7 +89,7 @@ type HttpRequest*[Size: static uint16] = object
 
 
 func capacity*(this: HttpRequest): uint16 {.inline.} =
-    ## Returns the capacity of the request's internal buffer.
+    ## Returns the capacity of the request's internal buffer in bytes.
     ## The buffer's capacity determines the total size of headers and metadata in total that it can store and process.
 
     return this.buffer.len
@@ -206,14 +206,14 @@ func initHttpRequest*(size: static uint16 = httpRequestMaxHeadersDefaultSize): H
     return HttpRequest[size].default
 
 
-func nextChunkWriteInfo*(
+func nextChunkInfo*(
     this: HttpRequest,
     desiredWriteSize: uint16 = httpRequestMaxHeadersDefaultSize,
 ): (ptr UncheckedArray[uint8], int) {.inline.} =
     ## Returns a pointer to the buffer to write the next chunk to, and the max number of bytes that can be written to it.
     ## Do not write more bytes than the number returned by this proc, otherwise memory corruption or crashing will occur.
     ## If the max size returned is 0, no more data can be written until the object is reset.
-    ## If the request's status is `InvalidRequest` or `Done`, 0 will be returned for the max value, the pointer will be nil.
+    ## If the request's status is `InvalidRequest` or `Done`, 0 will be returned for the max value, and the pointer will be nil.
     ## Assume that the returned pointer is nil if the max write size is 0.
     ## 
     ## Once data has been written, call `ingest`, specifying the number of bytes that were written.
@@ -227,7 +227,7 @@ func nextChunkWriteInfo*(
 
 func ingest*(this: var HttpRequest, chunkLen: int) {.inline.} =
     ## Ingests a new chunk of data and parses it.
-    ## Call this after writing to the pointer provided by `nextChunkWriteInfo`, specifying the number of bytes that were actually written.
+    ## Call this after writing to the pointer provided by `nextChunkInfo`, specifying the number of bytes that were actually written.
     ## This proc will manipulate the request passed to it, notably updating its status.
 
     block exit:
@@ -454,9 +454,9 @@ runnableExamples:
     var req = initHttpRequest()
 
     for i in 0 ..< 10_000_000:
-        let (bufPtr, readLen) = req.nextChunkWriteInfo(1024)
+        let (bufPtr, len) = req.nextChunkInfo(1024)
 
-        req.ingest(read(bufPtr, readLen))
+        req.ingest(read(bufPtr, len))
         req.reset()
 
         readCount = 0
