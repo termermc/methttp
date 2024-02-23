@@ -1,7 +1,9 @@
 import std/[options, os]
 
+
 const httpRequestMaxHeadersDefaultSize* {.intdefine.}: uint16 = 2048
-    ## The default maximum size of all headers in a request
+    ## The default maximum size of all headers in a request, in bytes
+
 
 const HttpRequestMaxHeadersCount*: uint8 = 32
 

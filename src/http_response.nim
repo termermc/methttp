@@ -1,6 +1,10 @@
 import std/[httpcore]
 
 
+const httpResponseMaxHeadersDefaultSize* {.intdefine.}: uint16 = 2048
+    ## The default maximum size of all headers in a response, in bytes
+
+
 type HttpResponseState* {.pure.} = enum
     ## All possible states of an HttpResponse object.
     ## These states determine which actions can be performed on an object.
@@ -145,7 +149,7 @@ func addStatus*(this: var HttpResponse, statusCode: HttpCode): AddStatusResult {
     return AddStatusResult.Success
 
 
-func initHttpResponse*(size: static uint16): HttpResponse[size] {.inline.} =
+func initHttpResponse*(size: static uint16 = httpResponseMaxHeadersDefaultSize): HttpResponse[size] {.inline.} =
     ## Initializes a new HttpResponse object.
     ## Note that `size` must be at least large enough to accomodate the initial headers size and trailing CRLF, which will be 52 bytes, which accomodates for the longest status message defined for `HttpCode`.
 
@@ -261,7 +265,10 @@ func endHeaders*(this: var HttpResponse) =
     this.stateEnum = HttpResponseState.Composed
 
 
-func nextChunkInfo*(this: HttpResponse): (ptr UncheckedArray[uint8], int) {.inline.} =
+func nextChunkInfo*(
+    this: HttpResponse,
+    desiredReadSize: uint16 = httpResponseMaxHeadersDefaultSize,
+): (ptr UncheckedArray[uint8], int) {.inline.} =
     ## Returns a pointer to the buffer to read the next chunk from, and the max number of bytes that can be read from it.
     ## Do not read more bytes than the number returned by this proc, otherwise crashing will occur or garbage will be read.
     ## If the max size returned is 0, no more data can be read until the object is reset.
@@ -273,7 +280,7 @@ func nextChunkInfo*(this: HttpResponse): (ptr UncheckedArray[uint8], int) {.inli
     if unlikely(this.stateEnum != HttpResponseState.Composed):
         return (nil, 0)
 
-    return this.bufferLen - this.readLen
+    return min(desiredReadSize, this.bufferLen - this.readLen)
 
 
 func markRead*(this: var HttpResponse, len: SomeInteger) {.inline.} =
