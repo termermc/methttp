@@ -15,37 +15,42 @@ type HttpRequestHeaderView = object
     name: BufView[uint16]
     value: BufView[uint16]
 
-type HttpRequestState* {.pure.} = enum
+type HttpRequestState* {.pure, size: 1.} = enum
     ## All possible states of an HttpRequest object.
     ## These states determine which actions can be performed on an object.
 
-    Ready = 0.uint8
+    Ready
         ## The object is ready to have a request parsed into it
 
-    ReadingMethod = 1.uint8
+    ReadingMethod
         ## The request's method is being read
 
-    ReadingUri = 2.uint8
+    ReadingUri
         ## The request's URI is being read
     
-    ReadingProtocol = 3.uint8
+    ReadingProtocol
         ## The request's protocol version is being written
 
-    ReadingHeaderName = 4.uint8
+    ReadingHeaderName
         ## A header's name is being read
 
-    ReadingHeaderValue = 5.uint8
+    ReadingHeaderValue
         ## A header's value is being read
 
-    InvalidRequest = 6.uint8
+    InvalidRequest
         ## A malformed or otherwise request was received, so parsing was terminated.
         ## This can happen before or after headers have been read, so you must not try to read headers or metadata from the request when this state is set.
         ## This can happen if malformed headers are received, the HTTP protocol doesn't match, header data size exceeded capacity, or the request body could not be read.
 
-    Done = 7.uint8
+    Done
         ## The request's metadata and headers have been fully read.
         ## From this state onward, the request's headers have been fully read, and the request can safely be passed to a handler.
         ## There still may be a body to read, and in fact they may be a fragment of that body in the buffer after `headersEndIdx`.
+
+
+when sizeof(HttpRequestState) > 1:
+    {.fatal: "HttpRequestState enum values must not exceed 8 bits".}
+
 
 type HttpRequest*[Size: static uint16] = object
     ## An HTTP/1.1 request.

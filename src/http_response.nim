@@ -9,14 +9,23 @@ type HttpResponseState* {.pure.} = enum
     ## All possible states of an HttpResponse object.
     ## These states determine which actions can be performed on an object.
 
-    Ready = 0.uint8
+    Ready = 0
         ## The object is ready to have a response status written to it
     
-    WritingHeaders = 1.uint8
+    WritingHeaders = 1
         ## Response headers are being written or are ready to be written
 
-    Composed = 2.uint8
+    Composed = 2
         ## The response status and headers are fully constructed and can be written to a socket
+
+    Done = 3
+        ## The response's headers have been fully read.
+        ## From this state onward, the response's headers have been fully read, and the response can safely be reset without losing anything that was not already read.
+        ## At this stage, it would make sense to write the response body.
+
+
+when sizeof(HttpResponseState) > 1:
+    {.fatal: "HttpResponseState enum values must not exceed 8 bits".}
 
 
 type HttpResponse*[Size: static uint16] = object
@@ -66,6 +75,12 @@ func reset*(this: var HttpResponse, overwriteBufferWithZeros: bool = true) {.inl
     this.readLen = 0
 
 
+func state*(this: HttpResponse): HttpResponseState {.inline.} =
+    ## Gets the response's current state
+    
+    return this.stateEnum
+
+
 template writeProtoHeader(buf) =
     buf[0] = 'H'
     buf[1] = 'T'
@@ -89,7 +104,7 @@ type AddStatusResult* {.pure.} = enum
         ## A status was probably already added.
 
 
-func addStatus*(this: var HttpResponse, statusCode: SomeInteger or HttpCode, statusMessage: sink openArray[char]): AddStatusResult {.inline.} =
+func addStatus*(this: var HttpResponse, statusCode: SomeInteger or HttpCode, statusMessage: openArray[char]): AddStatusResult {.inline.} =
     ## Adds an HTTP status to the response, assuming one has not yet been added since initialization or `reset` was called.
     ## Performs no validity checks on the status code; assumes that it is between 100-599 (inclusive).
     ## There also no checks performed on the status message.
@@ -120,7 +135,7 @@ func addStatus*(this: var HttpResponse, statusCode: SomeInteger or HttpCode, sta
 
     this.bufferLen = (msgLen + 15).uint16
 
-    this.status = HttpResponseState.WritingHeaders
+    this.stateEnum = HttpResponseState.WritingHeaders
 
     return AddStatusResult.Success
 
@@ -144,7 +159,7 @@ func addStatus*(this: var HttpResponse, statusCode: HttpCode): AddStatusResult {
 
     this.bufferLen = (11 + statusLen).uint16
 
-    this.status = HttpResponseState.WritingHeaders
+    this.stateEnum = HttpResponseState.WritingHeaders
 
     return AddStatusResult.Success
 
@@ -204,7 +219,7 @@ type AddHeaderResult* {.pure.} = enum
         ## The response's buffer does not have enough space left in it to write the header
 
 
-func addHeader*(this: var HttpResponse, name: sink openArray[char], value: sink openArray[char]): AddHeaderResult {.inline.} =
+func addHeader*(this: var HttpResponse, name: openArray[char], value: openArray[char]): AddHeaderResult {.inline.} =
     ## Adds a header to the response.
     ## 
     ## Performs no validity checks on names or values; assumes they are valid for insertion into HTTP responses.
@@ -280,11 +295,14 @@ func nextChunkInfo*(
     if unlikely(this.stateEnum != HttpResponseState.Composed):
         return (nil, 0)
 
-    return min(desiredReadSize, this.bufferLen - this.readLen)
+    return (cast[ptr UncheckedArray[uint8]](addr this.buffer[this.readLen]), min(desiredReadSize, this.bufferLen - this.readLen).int)
 
 
 func markRead*(this: var HttpResponse, len: SomeInteger) {.inline.} =
     ## Marks that X number of bytes have been read from the response.
     ## Call this after reading from the buffer pointer returned by `nextChunkInfo`, and make sure `len` is the exact number of bytes that were read from it.
 
-    this.readLen += len
+    this.readLen += len.uint16
+
+    if this.readLen >= this.bufferLen:
+        this.stateEnum = HttpResponseState.Done
