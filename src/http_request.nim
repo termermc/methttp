@@ -15,7 +15,7 @@ type HttpRequestHeaderView = object
     name: BufView[uint16]
     value: BufView[uint16]
 
-type HttpRequestState* {.pure, size: 1.} = enum
+type HttpRequestState* {.pure.} = enum
     ## All possible states of an HttpRequest object.
     ## These states determine which actions can be performed on an object.
 
